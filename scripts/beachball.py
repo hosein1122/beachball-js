@@ -31,7 +31,7 @@ import warnings
 import numpy as np
 from decorator import decorator
 
-
+# done
 D2R = np.pi / 180
 R2D = 180 / np.pi
 EPSILON = 0.00001
@@ -279,7 +279,7 @@ def beachball(fm, linewidth=2, facecolor='b', bgcolor='w', edgecolor='k',
         plt.show()
         return fig
 
-
+#done
 def plot_mt(T, N, P, size=200, plot_zerotrace=True,  # noqa
             x0=0, y0=0, xy=(0, 0), width=200):
     """
@@ -639,7 +639,7 @@ def plot_mt(T, N, P, size=200, plot_zerotrace=True,  # noqa
         colors.append(rgb1)
         return colors, collect
 
-
+#done
 def plot_dc(np1, size=200, xy=(0, 0), width=200):
     """
     Uses one nodal plane of a double couple to draw a beach ball plot.
@@ -730,7 +730,7 @@ def plot_dc(np1, size=200, xy=(0, 0), width=200):
         collect.append(xy2patch(y, x, res, xy))
     return ['b', 'w'], collect
 
-
+# done
 def xy2patch(x, y, res, xy):
     # check if one or two resolutions are specified (Circle or Ellipse)
     from matplotlib import path as mplpath
@@ -749,7 +749,7 @@ def xy2patch(x, y, res, xy):
     path = mplpath.Path(verts, codes)
     return patches.PathPatch(path)
 
-
+# done
 def pol2cart(th, r):
     """
     """
@@ -757,7 +757,7 @@ def pol2cart(th, r):
     y = r * np.sin(th)
     return (x, y)
 
-
+# done
 def strike_dip(n, e, u):
     """
     Finds strike and dip of plane given normal vector having components n, e,
@@ -783,7 +783,7 @@ def strike_dip(n, e, u):
     dip = np.arctan2(x, u) * r2d
     return (strike, dip)
 
-
+# done
 def aux_plane(s1, d1, r1):
     """
     Get Strike and dip of second plane.
@@ -825,7 +825,7 @@ def aux_plane(s1, d1, r1):
         rake = -z * r2d
     return (strike, dip, rake)
 
-
+#done
 def mt2plane(mt):
     """
     Calculates a nodal plane of a given moment tensor.
@@ -862,7 +862,7 @@ def mt2plane(mt):
     (ft, fd, fl) = tdl(an1, ae1)
     return NodalPlane(360 - ft, fd, 180 - fl)
 
-
+# done
 def tdl(an, bn):
     """
     Helper function for mt2plane.
@@ -945,7 +945,7 @@ def tdl(an, bn):
             fl = -fl
     return (ft, fd, fl)
 
-
+# done
 def mt2axes(mt):
     """
     Calculates the principal axes of a given moment tensor.
@@ -975,7 +975,7 @@ def mt2axes(mt):
     p = PrincipalAxis(d[0], az[0], pl[0])
     return (t, n, p)
 
-
+# done
 class PrincipalAxis(object):
     """
     A principal axis.
@@ -996,6 +996,7 @@ class PrincipalAxis(object):
         self.dip = dip
 
 
+# done
 class NodalPlane(object):
     """
     A nodal plane.
@@ -1016,6 +1017,7 @@ class NodalPlane(object):
         self.rake = rake
 
 
+# done
 class MomentTensor(object):
     """
     A moment tensor.

@@ -1,0 +1,30 @@
+{
+  "name": "beachball",
+  "version": "1.0.0",
+  "description": "A full JavaScript/Node.js port of the `beachball.py` module from ObsPy to render earthquake focal mechanism diagrams (beachballs) on HTML canvas.",
+  "type": "module",
+  "main": "dist/beachball.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "jest",
+    "build": "rollup -c"
+  },
+  "keywords": [
+    "seismology",
+    "beachball",
+    "focal-mechanism",
+    "canvas",
+    "obspy",
+    "earthquake"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "jest": "^30.0.3",
+    "rollup": "^2.79.2",
+    "rollup-plugin-terser": "^7.0.2"
+  }
+}

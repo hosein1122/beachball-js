@@ -113,25 +113,65 @@ export function strikeDip(n, e, u) {
  * @returns {{vertices: number[][], codes: string[]}}
  */
 export function xy2patch(x, y, res, xy) {
-    // Normalize res into [sx, sy]
-    let sx, sy;
-    if (Array.isArray(res)) {
-        if (res.length !== 2) throw new Error('res must be scalar or length-2');
-        [sx, sy] = res;
-    } else {
-        sx = sy = res;
+    // ── 1. Normalise `res` to a two-component array ──
+    try {
+        // If 'res' is a single primitive (number), it has no 'length' property
+        if (res.length === undefined) {
+            throw new TypeError();          // Mirrors Python’s TypeError in the assert
+        }
+
+        // If iterable, it must contain exactly two elements
+        if (res.length !== 2) {
+            throw new Error('res must contain exactly two elements'); // Like AssertionError
+        }
+    } catch (err) {
+        // Only handle the TypeError that signals a single-value resolution
+        if (err instanceof TypeError) {
+            res = [res, res];               // Same resolution in both axes → circle
+        } else {
+            throw err;                      // Re-throw any other errors
+        }
     }
 
-    // Transform points
-    const vertices = x.map((xi, idx) => {
-        const yi = y[idx];
-        return [xi * sx + xy[0], yi * sy + xy[1]];
-    });
+    // ── 2. Transform every (x, y) into the patch coordinate system ──
+    const vertices = x.map((xi, i) => [
+        xi * res[0] + xy[0],            // Scale & translate X
+        y[i] * res[1] + xy[1]           // Scale & translate Y
+    ]);
 
-    // Build drawing codes: 'M' + ('L' * (n-2)) + 'Z'
-    const codes = ['M', ...Array(Math.max(vertices.length - 2, 0)).fill('L'), 'Z'];
+    // ── 3. Return **data only**, no drawing primitives ──
+    return {
+        vertices,                       // [[x0,y0], [x1,y1], …] – closed polygon
+        res,                            // Saved for potential re-scaling
+        center: xy                      // Translation vector, useful for later
+    };                                 // equivalent to PathPatch
 
-    return { vertices, codes };
+
+
+
+
+
+
+
+    // // Normalize res into [sx, sy]
+    // let sx, sy;
+    // if (Array.isArray(res)) {
+    //     if (res.length !== 2) throw new Error('res must be scalar or length-2');
+    //     [sx, sy] = res;
+    // } else {
+    //     sx = sy = res;
+    // }
+
+    // // Transform points
+    // const vertices = x.map((xi, idx) => {
+    //     const yi = y[idx];
+    //     return [xi * sx + xy[0], yi * sy + xy[1]];
+    // });
+
+    // // Build drawing codes: 'M' + ('L' * (n-2)) + 'Z'
+    // const codes = ['M', ...Array(Math.max(vertices.length - 2, 0)).fill('L'), 'Z'];
+
+    // return { vertices, codes };
 }
 
 // ───────────────────────────────────────────
@@ -381,404 +421,700 @@ export function mt2axes(mt) {
 // 8. plotDC → JavaScript port of plot_dc (double-couple beachball)
 // ---------------------------------------------------------------
 /**
- * Builds pressure & tension polygons for a double-couple beachball.
+ * Build the geometric description of a double-couple focal-mechanism
+ * “beach-ball” suitable for later rendering on any 2-D backend
+ * (Canvas, SVG, WebGL …).
  *
- * @param {NodalPlane} plane            – first nodal plane
- * @param {object}     opts
- * @param {number}     opts.radius      – X-radius in px (mandatory)
- * @param {number=}    opts.radiusY     – Y-radius; defaults to radius
- * @param {number[]}   opts.center      – [cx, cy] center of ball
- * @param {number=}    opts.phiStep     – angular step in radians (default 0.01)
- * @returns {{pressure:Patch, tension:Patch}}
+ * No drawing is performed here; the function returns *data only*.
  *
- * Where Patch = { vertices:number[][], codes:string[] }
+ * @param {Object}        np1              – First nodal-plane object
+ * @param {number}        np1.strike       – Strike  (degrees, 0–360)
+ * @param {number}        np1.dip          – Dip     (degrees, 0–90)
+ * @param {number}        np1.rake         – Rake    (degrees, −180–180 or 0–360)
+ * @param {number} [size = 200]            – Output square size in pixels
+ * @param {[number,number]} [xy = [0,0]]   – Centre of the plot in user units
+ * @param {number|[number,number]} [width = 200]
+ *        If a single number, circle radius in pixels.
+ *        If a pair [xw, yw], ellipse half-widths along *x* and *y*.
+ *
+ * @returns {[string[], Object[]]}
+ *   • **colours** — two-element array `['b','w']` (pressure colour first).  
+ *   • **patches** — array of objects produced by `xy2patch()`, each with:
+ *     ─ `vertices` : `[x,y][]` closed polygon (screen units)  
+ *     ─ `res`      : `[rx,ry]` per-axis resolution scaling (unitless)  
+ *     ─ `center`   : `[cx,cy]` translation applied when creating vertices
  */
-export function plotDC(plane, {
-    radius,
-    radiusY = radius,
-    center = [0, 0],
-    phiStep = 0.01
-} = {}) {
-    const s1 = plane.strike;
-    const d1 = plane.dip;
-    let r1 = plane.rake;
-
-    let m = 0;
-    if (r1 > 180) { r1 -= 180; m = 1; }
-    if (r1 < 0) { r1 += 180; m = 1; }
-
-    const [s2, d2] = auxPlane(s1, d1, r1);
-
-    const d1c = Math.min(d1, 89.9999);
-    const d2c = Math.min(d2, 89.9999);
-
-    // build phi array
-    const phi = [];
-    for (let p = 0; p < Math.PI; p += phiStep) phi.push(p);
-
-    // length functions
-    const lCalc = dipDeg => {
-        const A = 90 - dipDeg;
-        return phi.map(p =>
-            Math.sqrt(
-                (A ** 2) /
-                (Math.sin(p) ** 2 + (Math.cos(p) ** 2) * (A ** 2) / (90 ** 2))
-            )
-        );
-    };
-
-    const l1 = lCalc(d1c);
-    const l2 = lCalc(d2c);
-
-    const patches = [];
-
-    for (const m_ of [((m + 1) % 2), m]) {
-        // first arc
-        const [x1Arr, y1Arr] = pol2cart(
-            phi.map(p => p + s1 * D2R),
-            l1
-        );
-
-        // build th1 & th2
-        let th1 = [], th2 = [], x2Arr, y2Arr, inc = 1;
-
-        if (m_ === 1) {
-            const lo = s1 - 180, hi = s2;
-            if (lo > hi) inc = -1;
-            for (let t = lo; inc > 0 ? t < hi : t > hi; t += inc) th1.push(t);
-            [x2Arr, y2Arr] = pol2cart(
-                phi.map(p => p + s2 * D2R),
-                l2
-            );
-            for (let t = s2 + 180; inc > 0 ? t > s1 : t < s1; t -= inc) th2.push(t);
-        } else {
-            const hi = s1 - 180, lo = s2 - 180;
-            if (lo > hi) inc = -1;
-            for (let t = hi; inc > 0 ? t < lo : t > lo; t -= inc) th1.push(t);
-            [x2Arr, y2Arr] = pol2cart(
-                phi.map(p => p + s2 * D2R),
-                l2
-            );
-            x2Arr.reverse(); y2Arr.reverse();
-            for (let t = s2; inc > 0 ? t < s1 : t > s1; t += inc) th2.push(t);
+export function plotDC(np1, size = 200, xy = [0, 0], width = 200) {
+    // ─── 1. Check whether 'width' indicates a Circle (one value) or an Ellipse (two values) ───
+    try {
+        // If 'width' is a single primitive (e.g. number), it has no 'length' property
+        if (width.length === undefined) {
+            throw new TypeError();          // Mirrors Python’s TypeError in the assert
         }
 
-        // correct radii arrays to match angles
-        const ones1 = new Array(th1.length).fill(90);
-        const ones2 = new Array(th2.length).fill(90);
-
-        const [xs1, ys1] = pol2cart(
-            th1.map(t => t * D2R),
-            ones1
-        );
-        const [xs2, ys2] = pol2cart(
-            th2.map(t => t * D2R),
-            ones2
-        );
-
-        // concatenate
-        const x = [...x1Arr, ...xs1, ...x2Arr, ...xs2];
-        const y = [...y1Arr, ...ys1, ...y2Arr, ...ys2];
-
-        // scale to radius
-        const vx = x.map(v => v * radius / 90);
-        const vy = y.map(v => v * radiusY / 90);
-
-        // build patch
-        patches.push(xy2patch(vy, vx, [1, 1], center));
+        // If iterable, it must contain exactly two elements
+        if (width.length !== 2) {
+            throw new Error('width must contain exactly two elements'); // Like AssertionError
+        }
+    } catch (err) {
+        // Handle only the TypeError that signals a single-value width
+        if (err instanceof TypeError) {
+            width = [width, width];         // Same width in both directions → circle
+        } else {
+            throw err;                      // Re-throw any other errors
+        }
     }
 
-    return { tension: patches[0], pressure: patches[1] };
+    // ─── 2. Normalise rake angle to the 0–180° interval ───
+    let s_1 = np1.strike;       // Strike
+    let d_1 = np1.dip;          // Dip
+    let r_1 = np1.rake;         // Rake
+
+    let m = 0;                  // Flag: 1 if rake was adjusted
+
+    // If rake exceeds 180°, wrap it down into the 0–180° range
+    if (r_1 > 180) {
+        r_1 -= 180;
+        m = 1;                    // Original rake was out of range
+    }
+
+    // If rake is negative, shift it up into the 0–180° range
+    if (r_1 < 0) {
+        r_1 += 180;
+        m = 1;                    // Original rake was out of range
+    }
+
+
+    // Get azimuth and dip of the second plane
+    const [s_2, d_2, _r_2] = auxPlane(s_1, d_1, r_1);
+
+    // ─── 3. Prepare half-size and clamp dip angles below 90° ───
+    const d = size / 2;                 // Half of the canvas size (radius in pixels)
+
+    // Dip angles of exactly 90° cause singularities; cap them at 89.9999°
+    if (d_1 >= 90) d_1 = 89.9999;
+    if (d_2 >= 90) d_2 = 89.9999;
+
+
+    // ─── 4. Create a phi array (0 … π, step 0.01) ───
+    // Note: Math.PI is not an exact multiple of 0.01, so the last value is < π
+    const phi = [];
+    for (let t = 0; t < Math.PI; t += 0.01) {
+        phi.push(t);
+    }
+
+    // ─── 5. Compute l1 and l2 for the two nodal planes ───
+    const ninetySquared = 90 * 90;
+    const k1 = 90 - d_1;               // Constant term for first plane
+    const k2 = 90 - d_2;               // Constant term for second plane
+
+    const l1 = phi.map(t => {
+        // numerator = (90 − d1)²
+        // denominator = sin²φ + cos²φ · (90 − d1)² / 90²
+        const numerator = k1 * k1;
+        const denominator =
+            Math.sin(t) ** 2 +
+            (Math.cos(t) ** 2) * (k1 * k1) / ninetySquared;
+        return Math.sqrt(numerator / denominator);
+    });
+
+    const l2 = phi.map(t => {
+        const numerator = k2 * k2;
+        const denominator =
+            Math.sin(t) ** 2 +
+            (Math.cos(t) ** 2) * (k2 * k2) / ninetySquared;
+        return Math.sqrt(numerator / denominator);
+    });
+
+    // ─── 6. Build polygon paths for tension (white) and pressure (black) lobes ───
+    const collect = [];
+
+    // Iterate first over the tension side, then over the pressure side
+    for (const m_ of [(m + 1) % 2, m]) {
+        let inc = 1;
+
+        // Segment on first nodal great-circle
+        const [x_1, y_1] = pol2cart(
+            phi.map(t => t + s_1 * D2R),   // φ shifted by strike of plane-1
+            l1                              // corresponding radii
+        );
+
+        let th1, th2, xs_1, ys_1, x_2, y_2;
+
+        if (m_ === 1) {
+            // ----- Tension lobe -----
+            let lo = s_1 - 180;
+            let hi = s_2;
+            if (lo > hi) inc = -1;
+
+            th1 = range(s_1 - 180, s_2, inc);           // mimic np.arange
+            [xs_1, ys_1] = pol2cart(
+                th1.map(t => t * D2R),
+                Array(th1.length).fill(90)
+            );
+
+            [x_2, y_2] = pol2cart(
+                phi.map(t => t + s_2 * D2R),
+                l2
+            );
+
+            th2 = range(s_2 + 180, s_1, -inc);
+        } else {
+            // ----- Pressure lobe -----
+            let hi = s_1 - 180;
+            let lo = s_2 - 180;
+            if (lo > hi) inc = -1;
+
+            th1 = range(hi, lo, -inc);
+            [xs_1, ys_1] = pol2cart(
+                th1.map(t => t * D2R),
+                Array(th1.length).fill(90)
+            );
+
+            [x_2, y_2] = pol2cart(
+                phi.map(t => t + s_2 * D2R),
+                l2
+            );
+            x_2.reverse();                     // reverse to preserve winding
+            y_2.reverse();
+
+            th2 = range(s_2, s_1, inc);
+        }
+
+        // Closing arc on the auxiliary great-circle
+        const [xs_2, ys_2] = pol2cart(
+            th2.map(t => t * D2R),
+            Array(th2.length).fill(90)
+        );
+
+        // Concatenate all pieces into one polygon
+        const x = [...x_1, ...xs_1, ...x_2, ...xs_2];
+        const y = [...y_1, ...ys_1, ...y_2, ...ys_2];
+
+        // Scale from degrees (radius 90) to pixel units (radius d)
+        const xScaled = x.map(v => v * d / 90);
+        const yScaled = y.map(v => v * d / 90);
+
+        // console.log(xScaled.length, yScaled.length);
+        // console.log(xScaled[0], yScaled[0]);
+
+        // Pixel resolution relative to canvas size
+        const res = width.map(v => v / size);
+
+        // Convert (x,y) arrays to a drawable patch and store
+        collect.push(xy2patch(yScaled, xScaled, res, xy));
+    }
+
+    // Helper: numpy-like arange
+    function range(start, stop, step = 1) {
+        const out = [];
+        if (step > 0) {
+            for (let v = start; v < stop; v += step) out.push(v);
+        } else {
+            for (let v = start; v > stop; v += step) out.push(v);
+        }
+        return out;
+    }
+
+    return [['b', 'w'], collect];   // colour order + collection of polygons
 }
 
-// ───────────────────────────────────────────
-// 9. plotMT → port of beachball.py::plot_mt
-//--------------------------------------------------------
-/**
- * Builds patches for a moment-tensor–based beachball.
- *
- * @param {PrincipalAxis} T
- * @param {PrincipalAxis} N
- * @param {PrincipalAxis} P
- * @param {object} opts
- * @param {number} opts.radius      – radius in px (controls overall size)
- * @param {number=} opts.radiusY    – y-axis radius; defaults to radius
- * @param {number[]} opts.center    – [cx, cy] center offset
- * @param {boolean=} opts.zeroTrace – if true, force zero isotropic part (default true)
- * @returns {{tension:{vertices:number[][],codes:string[]}, pressure:{vertices:number[][],codes:string[]}}}
- */
-export function plotMT(T, N, P, {
-    radius,
-    radiusY = radius,
-    center = [0, 0],
-    zeroTrace = true
-} = {}) {
-    // unpack
+export function plotMT(T, N, P, size = 200, plot_zerotrace = true, x0 = 0, y0 = 0, xy = [0, 0], width = 200) {
+
+    /* ---- check if one or two widths are specified (Circle / Ellipse) */
+    /* from matplotlib import patches  ← irrelevant in JS               */
+    try {
+        if (!Array.isArray(width) || width.length !== 2) throw new TypeError();
+    } catch (e) {
+        width = [width, width];
+    }
+
+
+    /* ---- Python lists replaced with JS arrays of same length -------- */
+    const collect = [];
+    const colors = [];
+    const res = width.map(value => value / size);
+    let b = 1;
+    let big_iso = 0;
+    let j = 1;
+    let j2 = 0;
+    let j3 = 0;
+    let n = 0;
+
+    const azi = Array.from({ length: 3 }, () => new Array(2).fill(0));
+    const x = new Array(400).fill(0);
+    const y = new Array(400).fill(0);
+    const x2 = new Array(400).fill(0);
+    const y2 = new Array(400).fill(0);
+    const x3 = new Array(400).fill(0);
+    const y3 = new Array(400).fill(0);
+    const xp1 = new Array(800).fill(0);
+    const yp1 = new Array(800).fill(0);
+    const xp2 = new Array(400).fill(0);
+    const yp2 = new Array(400).fill(0);
+
+    /* ---- a, p, v arrays -------------------------------------------- */
     const a = [T.strike, N.strike, P.strike];
     const p = [T.dip, N.dip, P.dip];
     const v = [T.val, N.val, P.val];
 
-    // isotropic part
-    let vi = (v[0] + v[1] + v[2]) / 3;
-    for (let i = 0; i < 3; i++) v[i] -= vi;
-
-    // early return iso-only
-    const mag = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
-    if (Math.abs(mag) < EPSILON) {
-        return {
-            tension: { vertices: [], codes: [] },
-            pressure: { vertices: [], codes: [] }
-        };
+    let vi = (v[0] + v[1] + v[2]) / 3.0;
+    for (let i = 0; i < 3; i++) {
+        v[i] = v[i] - vi;
     }
 
-    // choose principal axes indices
-    const d = Math.abs(v[0]) >= Math.abs(v[2]) ? 0 : 2;
-    const m = d === 0 ? 2 : 0;
-    if (zeroTrace) vi = 0;
+    const radius_size = size * 0.5;
+
+    /* ---- pure implosion-explosion check ----------------------------- */
+    if (Math.abs(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) < EPSILON) {
+        if (vi > 0.0) {
+            const cir = { type: "ellipse", xy, width: width[0], height: width[1] };
+            collect.push(cir);
+            colors.push("b");
+        }
+        if (vi < 0.0) {
+            const cir = { type: "ellipse", xy, width: width[0], height: width[1] };
+            collect.push(cir);
+            colors.push("w");
+        }
+        return [colors, collect];
+    }
+
+    /* ---- choose d / m ---------------------------------------------- */
+    let d, m;
+    if (Math.abs(v[0]) >= Math.abs(v[2])) { d = 0; m = 2; }
+    else { d = 2; m = 0; }
+
+    if (plot_zerotrace) vi = 0.0;
+
     const f = -v[1] / v[d];
     const iso = vi / v[d];
 
-    // early return no nodes
-    if (iso < -1 || iso > 1 - f) {
-        return {
-            tension: { vertices: [], codes: [] },
-            pressure: { vertices: [], codes: [] }
-        };
+    // # Cliff Frohlich, Seismological Research letters,
+    // # Vol 7, Number 1, January-February, 1996
+    // # Unless the isotropic parameter lies in the range
+    // # between -1 and 1 - f there will be no nodes whatsoever
+    /* ---- Frohlich node existence test ------------------------------ */
+    if (iso < -1) {
+        collect.push({ type: "ellipse", xy, width: width[0], height: width[1] });
+        colors.push("w");
+        return [colors, collect];
+    } else if (iso > 1 - f) {
+        collect.push({ type: "ellipse", xy, width: width[0], height: width[1] });
+        colors.push("b");
+        return [colors, collect];
     }
 
-    // precompute trig
-    const spd = Math.sin(p[d] * D2R),
-        cpd = Math.cos(p[d] * D2R),
-        spb = Math.sin(p[1] * D2R),
-        cpb = Math.cos(p[1] * D2R),
-        spm = Math.sin(p[m] * D2R),
-        cpm = Math.cos(p[m] * D2R),
-        sad = Math.sin(a[d] * D2R),
-        cad = Math.cos(a[d] * D2R),
-        sab = Math.sin(a[1] * D2R),
-        cab = Math.cos(a[1] * D2R),
-        sam = Math.sin(a[m] * D2R),
-        cam = Math.cos(a[m] * D2R);
+    /* ---- lots of trig shorthands ----------------------------------- */
+    const spd = Math.sin(p[d] * D2R);
+    const cpd = Math.cos(p[d] * D2R);
+    const spb = Math.sin(p[b] * D2R);
+    const cpb = Math.cos(p[b] * D2R);
+    const spm = Math.sin(p[m] * D2R);
+    const cpm = Math.cos(p[m] * D2R);
+    const sad = Math.sin(a[d] * D2R);
+    const cad = Math.cos(a[d] * D2R);
+    const sab = Math.sin(a[b] * D2R);
+    const cab = Math.cos(a[b] * D2R);
+    const sam = Math.sin(a[m] * D2R);
+    const cam = Math.cos(a[m] * D2R);
 
-    // allocate arrays
-    const azi = Array.from({ length: 3 }, () => [0, 0]);
-    const x = new Array(400).fill(0),
-        y = new Array(400).fill(0),
-        x2 = new Array(400).fill(0),
-        y2 = new Array(400).fill(0),
-        x3 = new Array(400).fill(0),
-        y3 = new Array(400).fill(0),
-        xp1 = new Array(800).fill(0),
-        yp1 = new Array(800).fill(0),
-        xp2 = new Array(400).fill(0),
-        yp2 = new Array(400).fill(0);
-
-    let bigIso = 0, j = 1, j2 = 0, j3 = 0, nIdx = 0, azp = 0;
-
-    // loop 0..359
+    /* ---- main 0-to-359 loop ---------------------------------------- */
+    let azp = 0.0;
     for (let i = 0; i < 360; i++) {
         const fir = i * D2R;
-        const s2a = (2 + 2 * iso) / (3 + (1 - 2 * f) * Math.cos(2 * fir));
-        if (s2a > 1) { bigIso++; continue; }
-        const al = Math.asin(Math.sqrt(s2a)),
-            sfi = Math.sin(fir),
-            cfi = Math.cos(fir),
-            san = Math.sin(al),
-            can = Math.cos(al);
-        const xz = can * spd + san * sfi * spb + san * cfi * spm;
-        let xn = can * cpd * cad + san * sfi * cpb * cab + san * cfi * cpm * cam,
-            xe = can * cpd * sad + san * sfi * cpb * sab + san * cfi * cpm * sam;
-        let takeoff, az;
-        if (Math.abs(xn) < EPSILON && Math.abs(xe) < EPSILON) {
-            takeoff = 0; az = 0;
-        } else {
-            az = Math.atan2(xe, xn);
-            if (az < 0) az += 2 * Math.PI;
-            takeoff = Math.acos(xz / Math.hypot(xz, xn, xe));
-        }
-        if (takeoff > Math.PI / 2) {
-            takeoff = Math.PI - takeoff;
-            az += Math.PI;
-            if (az > 2 * Math.PI) az -= 2 * Math.PI;
-        }
-        const r = Math.SQRT2 * Math.sin(takeoff / 2),
-            si = Math.sin(az),
-            co = Math.cos(az);
+        const s2alphan = (2.0 + 2.0 * iso) /
+            (3.0 + (1.0 - 2.0 * f) * Math.cos(2.0 * fir));
 
-        if (i === 0) {
-            azi[0][0] = az;
-            x[0] = center[0] + radius * r * si;
-            y[0] = center[1] + radius * r * co;
-            azp = az;
+        if (s2alphan > 1.0) {
+            big_iso += 1;
         } else {
-            const dAz = Math.abs(Math.abs(az - azp) - Math.PI);
-            if (dAz < 10 * D2R) {
-                azi[nIdx][1] = azp;
-                nIdx++;
-                azi[nIdx][0] = az;
-            }
-            if (nIdx === 0) {
-                x[j] = center[0] + radius * r * si;
-                y[j] = center[1] + radius * r * co;
-                j++;
-            } else if (nIdx === 1) {
-                xp1[j2] = center[0] + radius * r * si;
-                yp1[j2] = center[1] + radius * r * co;
-                j2++;
+            const alphan = Math.asin(Math.sqrt(s2alphan));
+            const sfi = Math.sin(fir);
+            const cfi = Math.cos(fir);
+            const san = Math.sin(alphan);
+            const can = Math.cos(alphan);
+
+            const xz = can * spd + san * sfi * spb + san * cfi * spm;
+            const xn = can * cpd * cad + san * sfi * cpb * cab +
+                san * cfi * cpm * cam;
+            const xe = can * cpd * sad + san * sfi * cpb * sab +
+                san * cfi * cpm * sam;
+
+            let takeoff, az;
+            if (Math.abs(xn) < EPSILON && Math.abs(xe) < EPSILON) {
+                takeoff = 0.0;
+                az = 0.0;
             } else {
-                xp2[j3] = center[0] + radius * r * si;
-                yp2[j3] = center[1] + radius * r * co;
-                j3++;
+                az = Math.atan2(xe, xn);
+                if (az < 0.0) az += Math.PI * 2.0;
+                takeoff = Math.acos(
+                    xz / Math.sqrt(xz * xz + xn * xn + xe * xe)
+                );
             }
-            azp = az;
+
+            if (takeoff > Math.PI / 2.0) {
+                takeoff = Math.PI - takeoff;
+                az += Math.PI;
+                if (az > Math.PI * 2.0) az -= Math.PI * 2.0;
+            }
+
+            const r = Math.SQRT2 * Math.sin(takeoff / 2.0);
+            const si = Math.sin(az);
+            const co = Math.cos(az);
+
+            if (i === 0) {
+                azi[i][0] = az;
+                x[i] = x0 + radius_size * r * si;
+                y[i] = y0 + radius_size * r * co;
+                azp = az;
+            } else {
+                if (Math.abs(Math.abs(az - azp) - Math.PI) < D2R * 10.0) {
+                    azi[n][1] = azp;
+                    n += 1;
+                    azi[n][0] = az;
+                }
+                if (Math.abs(Math.abs(az - azp) - Math.PI * 2.0) < D2R * 2.0) {
+                    if (azp < az) azi[n][0] += Math.PI * 2.0;
+                    else azi[n][0] -= Math.PI * 2.0;
+                }
+                if (n === 0) {
+                    x[j] = x0 + radius_size * r * si;
+                    y[j] = y0 + radius_size * r * co;
+                    j += 1;
+                } else if (n === 1) {
+                    x2[j2] = x0 + radius_size * r * si;
+                    y2[j2] = y0 + radius_size * r * co;
+                    j2 += 1;
+                } else if (n === 2) {
+                    x3[j3] = x0 + radius_size * r * si;
+                    y3[j3] = y0 + radius_size * r * co;
+                    j3 += 1;
+                }
+                azp = az;
+            }
         }
     }
-    azi[nIdx][1] = azp;
+    azi[n][1] = azp;
 
-    // prepare patches
-    const patches = [];
-
-    // central circle
-    patches.push(
-        xy2patch(
-            [center[1], center[1]],
-            [center[0], center[0]],
-            [radiusY, radius],
-            [0, 0]
-        )
-    );
-
-    // main fill
-    if (nIdx === 0) {
-        patches.push(xy2patch(x.slice(0, j), y.slice(0, j), [1, 1], [0, 0]));
-    } else if (nIdx === 1) {
-        // combine xp1 (len j2) then segment from x/j, then xp2
-        const seg = xp1.slice(0, j2).concat(x.slice(0, j)).concat(x2.slice(0, j3));
-        const segY = yp1.slice(0, j2).concat(y.slice(0, j)).concat(y2.slice(0, j3));
-        patches.push(xy2patch(seg, segY, [1, 1], [0, 0]));
+    /* ---- color selections based on v[1] ----------------------------- */
+    let rgb1, rgb2;
+    if (v[1] < 0.0) {
+        rgb1 = "b";
+        rgb2 = "w";
     } else {
-        // nIdx===2
-        // combine xp2, xp1, x
-        const seg = xp2.slice(0, j3)
-            .concat(xp1.slice(0, j2))
-            .concat(x.slice(0, j));
-        const segY = yp2.slice(0, j3)
-            .concat(yp1.slice(0, j2))
-            .concat(y.slice(0, j));
-        patches.push(xy2patch(seg, segY, [1, 1], [0, 0]));
+        rgb1 = "w";
+        rgb2 = "b";
     }
 
-    // assign colors: tension first, pressure next
-    const rgb1 = v[1] < 0 ? 'b' : 'w';
-    const rgb2 = v[1] < 0 ? 'w' : 'b';
-    const [tPatch, pPatch] = patches;
-    const makeCodes = verts => {
-        if (verts.length === 0) return [];
-        const c = ['M'];
-        for (let i = 1; i < verts.length - 1; i++) c.push('L');
-        c.push('Z');
-        return c;
-    };
+    /* ---- background ellipse ---------------------------------------- */
+    const cir = { type: "ellipse", xy, width: width[0], height: width[1] };
+    collect.push(cir);
+    colors.push(rgb2);
 
-    return {
-        tension: { vertices: tPatch.vertices, codes: makeCodes(tPatch.vertices) },
-        pressure: { vertices: pPatch.vertices, codes: makeCodes(pPatch.vertices) }
-    };
+    /* ---- n == 0 case ------------------------------------------------ */
+    if (n === 0) {
+        collect.push(xy2patch(x.slice(0, 360), y.slice(0, 360), res, xy));
+        colors.push(rgb1);
+        return [colors, collect];
+    }
+
+    /* ---- n == 1 case ------------------------------------------------ */
+    if (n === 1) {
+        /* copy x,y into xp1,yp1 */
+        let i;
+        for (i = 0; i < j; i++) {
+            xp1[i] = x[i];
+            yp1[i] = y[i];
+        }
+        i -= 1;
+
+        /* unwrap azi[0][0] w.r.t. azi[0][1] */
+        if (azi[0][0] - azi[0][1] > Math.PI) {
+            azi[0][0] -= Math.PI * 2.0;
+        } else if (azi[0][1] - azi[0][0] > Math.PI) {
+            azi[0][0] += Math.PI * 2.0;
+        }
+
+        /* add arc points between azi[0][1] and azi[0][0] */
+        if (azi[0][0] < azi[0][1]) {
+            let az = azi[0][1] - D2R;
+            while (az > azi[0][0]) {
+                const si = Math.sin(az);
+                const co = Math.cos(az);
+                xp1[i] = x0 + radius_size * si;
+                yp1[i] = y0 + radius_size * co;
+                i += 1;
+                az -= D2R;
+            }
+        } else {
+            let az = azi[0][1] + D2R;
+            while (az < azi[0][0]) {
+                const si = Math.sin(az);
+                const co = Math.cos(az);
+                xp1[i] = x0 + radius_size * si;
+                yp1[i] = y0 + radius_size * co;
+                i += 1;
+                az += D2R;
+            }
+        }
+
+        collect.push(xy2patch(xp1.slice(0, i), yp1.slice(0, i), res, xy));
+        colors.push(rgb1);
+
+        /* copy x2,y2 into xp2,yp2 */
+        for (i = 0; i < j2; i++) {
+            xp2[i] = x2[i];
+            yp2[i] = y2[i];
+        }
+        i -= 1;
+
+        /* unwrap azi[1][0] w.r.t azi[1][1] */
+        if (azi[1][0] - azi[1][1] > Math.PI) {
+            azi[1][0] -= Math.PI * 2.0;
+        } else if (azi[1][1] - azi[1][0] > Math.PI) {
+            azi[1][0] += Math.PI * 2.0;
+        }
+
+        /* arc for second node set */
+        if (azi[1][0] < azi[1][1]) {
+            let az = azi[1][1] - D2R;
+            while (az > azi[1][0]) {
+                const si = Math.sin(az);
+                const co = Math.cos(az);
+                xp2[i] = x0 + radius_size * si;
+                i += 1;
+                yp2[i] = y0 + radius_size * co;
+                az -= D2R;
+            }
+        } else {
+            let az = azi[1][1] + D2R;
+            while (az < azi[1][0]) {
+                const si = Math.sin(az);
+                const co = Math.cos(az);
+                xp2[i] = x0 + radius_size * si;
+                i += 1;
+                yp2[i] = y0 + radius_size * co;
+                az += D2R;
+            }
+        }
+
+        collect.push(xy2patch(xp2.slice(0, i), yp2.slice(0, i), res, xy));
+        colors.push(rgb1);
+        return [colors, collect];
+    }
+
+    /* ---- n == 2 case ------------------------------------------------ */
+    if (n === 2) {
+        /* first concatenate x3 → xp1 */
+        let i = 0;
+        for (i = 0; i < j3; i++) {
+            xp1[i] = x3[i];
+            yp1[i] = y3[i];
+        }
+        i -= 1;
+
+        /* then x → xp1 */
+        for (let ii = 0; ii < j; ii++) {
+            xp1[i] = x[ii];
+            i++;
+            yp1[i] = y[ii];
+        }
+
+        /* big_iso shortcut --------------------------------------------- */
+        if (big_iso) {
+            let ii = j2 - 1;
+            while (ii >= 0) {
+                xp1[i] = x2[ii];
+                i += 1;
+                yp1[i] = y2[ii];
+                ii -= 1;
+            }
+            collect.push(xy2patch(xp1.slice(0, i), yp1.slice(0, i), res, xy));
+            colors.push(rgb1);
+            return [colors, collect];
+        }
+
+        /* unwrap azi[2][0] wrt azi[0][1] */
+        if (azi[2][0] - azi[0][1] > Math.PI) {
+            azi[2][0] -= Math.PI * 2.0;
+        } else if (azi[0][1] - azi[2][0] > Math.PI) {
+            azi[2][0] += Math.PI * 2.0;
+        }
+
+        /* arc between azi[0][1] and azi[2][0] */
+        if (azi[2][0] < azi[0][1]) {
+            let az = azi[0][1] - D2R;
+            while (az > azi[2][0]) {
+                const si = Math.sin(az);
+                const co = Math.cos(az);
+                xp1[i] = x0 + radius_size * si;
+                i += 1;
+                yp1[i] = y0 + radius_size * co;
+                az -= D2R;
+            }
+        } else {
+            let az = azi[0][1] + D2R;
+            while (az < azi[2][0]) {
+                const si = Math.sin(az);
+                const co = Math.cos(az);
+                xp1[i] = x0 + radius_size * si;
+                i += 1;
+                yp1[i] = y0 + radius_size * co;
+                az += D2R;
+            }
+        }
+
+        collect.push(xy2patch(xp1.slice(0, i), yp1.slice(0, i), res, xy));
+        colors.push(rgb1);
+
+        /* copy x2 → xp2 */
+        for (i = 0; i < j2; i++) {
+            xp2[i] = x2[i];
+            yp2[i] = y2[i];
+        }
+        i -= 1;
+
+        /* unwrap azi[1][0] wrt azi[1][1] */
+        if (azi[1][0] - azi[1][1] > Math.PI) {
+            azi[1][0] -= Math.PI * 2.0;
+        } else if (azi[1][1] - azi[1][0] > Math.PI) {
+            azi[1][0] += Math.PI * 2.0;
+        }
+
+        /* arc for second patch */
+        if (azi[1][0] < azi[1][1]) {
+            let az = azi[1][1] - D2R;
+            while (az > azi[1][0]) {
+                const si = Math.sin(az);
+                const co = Math.cos(az);
+                xp2[i] = x0 + radius_size * si;
+                i += 1;
+                yp2[i] = y0 + radius_size * co;
+                az -= D2R;
+            }
+
+        } else {
+            let az = azi[1][1] + D2R;
+            while (az < azi[1][0]) {
+                const si = Math.sin(az);
+                const co = Math.cos(az);
+                xp2[i] = x0 + radius_size * si;
+                i += 1;
+                yp2[i] = y0 + radius_size * co;
+                az += D2R;
+            }
+        }
+
+        collect.push(xy2patch(xp2.slice(0, i), yp2.slice(0, i), res, xy));
+        colors.push(rgb1);
+        return [colors, collect];
+    }
+
+    /* ---- fallback (should never happen) ----------------------------- */
+    return [colors, collect];
+
 }
+
 
 // ───────────────────────────────────────────
 // 10. beach → high-level port of beachball.py::beach
 //--------------------------------------------------------
 /**
- * Produces two styled patches (tension & pressure) for a beachball.
+ * Build a generic, renderer-agnostic “collection” for a beach-ball plot.
+ * No direct drawing here—just data and style metadata.
  *
- * @param {MomentTensor|NodalPlane|number[]} fm
- *   - MomentTensor instance OR
- *   - NodalPlane instance OR
- *   - Array[3] ([strike,dip,rake]) OR
- *   - Array[6] (moment tensor components)
- * @param {object} opts
- * @param {string} opts.facecolor  – color for tension quadrants (default 'b')
- * @param {string} opts.bgcolor    – color for pressure quadrants (default 'w')
- * @param {string} opts.edgecolor  – stroke color for outlines (default 'k')
- * @param {number} opts.alpha      – fill opacity [0..1] (default 1.0)
- * @param {number[]} opts.center   – [cx, cy] in px (default [0,0])
- * @param {number} opts.radius     – radius in px (mandatory)
- * @param {number=} opts.radiusY   – y-axis radius; defaults to radius
- * @param {number=} opts.phiStep   – angular step for DC (default 0.01)
- * @param {boolean=} opts.zeroTrace– force zero isotropic for MT (default true)
- * @returns {{
- *   tension:  {vertices:number[][], codes:string[], facecolor:string, edgecolor:string, alpha:number},
- *   pressure: {vertices:number[][], codes:string[], facecolor:string, edgecolor:string, alpha:number}
- * }}
+ * @param {Array|MomentTensor|NodalPlane} fm
+ *   Focal mechanism (3- or 6-element array, or MomentTensor/NodalPlane instance).
+ * @param {Object} [opts]
+ * @param {number} [opts.linewidth=2]
+ * @param {string} [opts.facecolor='b']
+ * @param {string} [opts.bgcolor='w']
+ * @param {string} [opts.edgecolor='k']
+ * @param {number} [opts.alpha=1.0]
+ * @param {Array<number>} [opts.xy=[0,0]]
+ * @param {number|Array<number>} [opts.width=200]
+ * @param {number} [opts.size=100]
+ * @param {boolean} [opts.nofill=false]
+ * @param {number} [opts.zorder=100]
+ * @param {*} [opts.axes=null]   // kept for API compatibility, unused here
+ *
+ * @returns {Object}
+ *   • patches: Array of data-only patch descriptors (ellipse or polygon)  
+ *   • fillColors: Array of fill colors (or null if nofill)  
+ *   • edgecolor, linewidth, alpha, zorder  
+ *   • xy, width, size  
+ *   • plotDcUsed: boolean flag which algorithm was used
  */
 export function beach(fm, {
+    linewidth = 2,
     facecolor = 'b',
     bgcolor = 'w',
     edgecolor = 'k',
     alpha = 1.0,
-    center = [0, 0],
-    radius,
-    radiusY,
-    phiStep = 0.01,
-    zeroTrace = true
+    xy = [0, 0],
+    width = 200,
+    size = 100,
+    nofill = false,
+    zorder = 100,
+    axes = null
 } = {}) {
-    if (radius == null) {
-        throw new Error('beach: opts.radius is required');
+    // ─── 1) Ensure minimum resolution ───
+    if (size < 100) size = 100;
+
+    // ─── 2) Normalize width to [wx, wy] ───
+    if (!Array.isArray(width) || width.length !== 2) {
+        width = [width, width];
     }
-    if (radiusY == null) radiusY = radius;
 
-    let plane = null, mt = null;
-
-    // determine input type
+    // ─── 3) Parse fm into np1 and optional MomentTensor mt ───
+    let mt = null, np1 = null;
     if (fm instanceof MomentTensor) {
-        mt = fm;
-        plane = mt2plane(mt);
+        mt = fm; np1 = mt2plane(mt);
     } else if (fm instanceof NodalPlane) {
-        plane = fm;
+        np1 = fm;
     } else if (Array.isArray(fm) && fm.length === 6) {
-        mt = new MomentTensor(fm[0], fm[1], fm[2], fm[3], fm[4], fm[5], 0);
-        plane = mt2plane(mt);
+        mt = new MomentTensor(...fm, 0);
+        np1 = mt2plane(mt);
     } else if (Array.isArray(fm) && fm.length === 3) {
-        plane = new NodalPlane(fm[0], fm[1], fm[2]);
+        np1 = new NodalPlane(...fm);
     } else {
-        throw new TypeError("beach: 'fm' must be MomentTensor, NodalPlane, or array of length 3 or 6");
+        throw new TypeError("Wrong input value for 'fm'.");
     }
 
-    let tensionPatch, pressurePatch;
-
+    // ─── 4) Choose DC or MT algorithm ───
+    let colors, patches, plotDcUsed = true;
     if (mt) {
-        // check if pure double-couple or full moment-tensor
-        const [T, N, P] = mt2axes(mt.normalized);
-        if (Math.abs(N.val) < EPSILON && Math.abs(T.val + P.val) < EPSILON) {
-            // pure double-couple from nodal plane
-            ({ tension: tensionPatch, pressure: pressurePatch } =
-                plotDC(plane, { radius, radiusY, center, phiStep }));
+        const [t, n, p] = mt2axes(mt.normalized);
+        if (Math.abs(n.val) < EPSILON && Math.abs(t.val + p.val) < EPSILON) {
+            [colors, patches] = plotDC(np1, size, xy, width);
         } else {
-            // use full moment-tensor logic
-            ({ tension: tensionPatch, pressure: pressurePatch } =
-                plotMT(T, N, P, { radius, radiusY, center, zeroTrace }));
+            [colors, patches] = plotMT(t, n, p, size, true, xy, width);
+            plotDcUsed = false;
         }
     } else {
-        // only nodal-plane → always DC
-        ({ tension: tensionPatch, pressure: pressurePatch } =
-            plotDC(plane, { radius, radiusY, center, phiStep }));
+        [colors, patches] = plotDC(np1, size, xy, width);
     }
 
-    // helper to map 'b'/'w' to actual colors
-    const mapCol = c => (c === 'b' ? facecolor : bgcolor);
-
-    // style the two patches
-    const stylePatch = (patch, cDummy) => ({
-        vertices: patch.vertices,
-        codes: patch.codes,
-        facecolor: mapCol(cDummy),
-        edgecolor,
-        alpha
+    // ─── 5) Build fillColors array ───
+    const fillColors = patches.map((_, i) => {
+        if (nofill) return null;
+        return colors[i] === 'b' ? facecolor : bgcolor;
     });
 
+    // ─── 6) Return data-only collection ───
     return {
-        tension: stylePatch(tensionPatch, 'b'),
-        pressure: stylePatch(pressurePatch, 'w')
+        patches,        // [{ type:'ellipse', xy:[x,y], width, height } | { vertices:[[x,y],…], res:[rx,ry], center:[cx,cy] }]
+        fillColors,     // [color|string|null]
+        edgecolor,      // string
+        linewidth,      // number
+        alpha,          // number
+        zorder,         // number
+        xy,             // [x,y]
+        width,          // [wx,wy]
+        size,           // number
+        plotDcUsed      // boolean
     };
 }
+
+

@@ -595,9 +595,6 @@ export function plotDC(np1, size = 200, xy = [0, 0], width = 200) {
         const xScaled = x.map(v => v * d / 90);
         const yScaled = y.map(v => v * d / 90);
 
-        // console.log(xScaled.length, yScaled.length);
-        // console.log(xScaled[0], yScaled[0]);
-
         // Pixel resolution relative to canvas size
         const res = width.map(v => v / size);
 
@@ -628,7 +625,6 @@ export function plotMT(T, N, P, size = 200, plot_zerotrace = true, x0 = 0, y0 = 
     } catch (e) {
         width = [width, width];
     }
-
 
     /* ---- Python lists replaced with JS arrays of same length -------- */
     const collect = [];
@@ -1046,16 +1042,16 @@ export function plotMT(T, N, P, size = 200, plot_zerotrace = true, x0 = 0, y0 = 
  *   • plotDcUsed: boolean flag which algorithm was used
  */
 export function beach(fm, {
-    linewidth = 2,//--
+    // linewidth = 2,//--
     facecolor = 'b',
     bgcolor = 'w',
-    edgecolor = 'k',//--
-    alpha = 1.0,//--
+    // edgecolor = 'k',//--
+    // alpha = 1.0,//--
     xy = [0, 0],
     width = 200,
     size = 100,
     nofill = false,
-    zorder = 100//--
+    // zorder = 100//--
 } = {}) {
     // ─── 1) Ensure minimum resolution ───
     if (size < 100) size = 100;
@@ -1088,12 +1084,16 @@ export function beach(fm, {
         if (Math.abs(n.val) < EPSILON && Math.abs(t.val + p.val) < EPSILON) {
             [colors, patches] = plotDC(np1, size, xy, width);
         } else {
-            [colors, patches] = plotMT(t, n, p, size, true, xy, width);
+            [colors, patches] = plotMT(t, n, p, size,
+                true, 0, 0, xy, width);
+
             plotDcUsed = false;
         }
     } else {
         [colors, patches] = plotDC(np1, size, xy, width);
     }
+
+
 
     // ─── 5) Build fillColors array ───
     const fillColors = patches.map((_, i) => {
@@ -1106,10 +1106,10 @@ export function beach(fm, {
     return {
         patches,        // [{ type:'ellipse', xy:[x,y], width, height } | { vertices:[[x,y],…], res:[rx,ry], center:[cx,cy] }]
         fillColors,     // [color|string|null]
-        edgecolor,      // string
-        linewidth,      // number
-        alpha,          // number
-        zorder,         // number
+        // edgecolor,      // string
+        // linewidth,      // number
+        // alpha,          // number
+        // zorder,         // number
         xy,             // [x,y]
         width,          // [wx,wy]
         size,           // number

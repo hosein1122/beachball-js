@@ -1016,7 +1016,6 @@ export function plotMT(T, N, P, size = 200, plot_zerotrace = true, x0 = 0, y0 = 
 
 }
 
-
 // ───────────────────────────────────────────
 // 10. beach → high-level port of beachball.py::beach
 //--------------------------------------------------------
@@ -1047,17 +1046,16 @@ export function plotMT(T, N, P, size = 200, plot_zerotrace = true, x0 = 0, y0 = 
  *   • plotDcUsed: boolean flag which algorithm was used
  */
 export function beach(fm, {
-    linewidth = 2,
+    linewidth = 2,//--
     facecolor = 'b',
     bgcolor = 'w',
-    edgecolor = 'k',
-    alpha = 1.0,
+    edgecolor = 'k',//--
+    alpha = 1.0,//--
     xy = [0, 0],
     width = 200,
     size = 100,
     nofill = false,
-    zorder = 100,
-    axes = null
+    zorder = 100//--
 } = {}) {
     // ─── 1) Ensure minimum resolution ───
     if (size < 100) size = 100;
@@ -1070,7 +1068,8 @@ export function beach(fm, {
     // ─── 3) Parse fm into np1 and optional MomentTensor mt ───
     let mt = null, np1 = null;
     if (fm instanceof MomentTensor) {
-        mt = fm; np1 = mt2plane(mt);
+        mt = fm;
+        np1 = mt2plane(mt);
     } else if (fm instanceof NodalPlane) {
         np1 = fm;
     } else if (Array.isArray(fm) && fm.length === 6) {
@@ -1098,7 +1097,8 @@ export function beach(fm, {
 
     // ─── 5) Build fillColors array ───
     const fillColors = patches.map((_, i) => {
-        if (nofill) return null;
+        if (nofill)
+            return null;
         return colors[i] === 'b' ? facecolor : bgcolor;
     });
 

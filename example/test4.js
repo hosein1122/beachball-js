@@ -76,6 +76,8 @@ function drawBeach(ctx, data) {
 
 
 
+
+
 // ─── 2) بخش اجرایی: تولید داده + ذخیره به PNG ───────────────────────────
 (async () => {
     // مقادیر Mxx را مطابق درخواست شما اینجا قرار دهید:
@@ -89,13 +91,19 @@ function drawBeach(ctx, data) {
     const mt = new MomentTensor(Mrr, Mtt, Mpp, Mrt, Mrp, Mtp, 0);
     const data = beach(mt);
 
-    console.log(data);
+    // console.log(data);
     // console.log(data.patches[1].vertices);
 
+
     // اندازهٔ دلخواه کانواس (مثلاً 400px)
-    const canvas = renderBeach(data, 400);
+    // const canvas = renderBeach(data, 400);
+
+    // const canvas = createCanvas(WIDTH, HEIGHT);
+    // const ctx    = canvas.getContext("2d");
+
+    // drawBeach
 
     // ذخیرهٔ تصویر
-    fs.writeFileSync('beachball.png', canvas.toBuffer('image/png'));
-    console.log('✅ Beachball saved as beachball.png');
+    // fs.writeFileSync('beachball.png', canvas.toBuffer('image/png'));
+    // console.log('✅ Beachball saved as beachball.png');
 })();

@@ -1,6 +1,6 @@
 // import necessary classes and helper
 import { MomentTensor, NodalPlane } from './classes.js';
-import { mt2plane, mt2axes, plotDC, plotMT } from './beachball.js';
+import { mt2plane, mt2axes, plotDC, plotMT, sdr2mt } from './beachball.js';
 import { EPSILON } from './constants.js';
 
 class BeachballComponent extends HTMLElement {
@@ -260,8 +260,16 @@ class BeachballComponent extends HTMLElement {
             // “z-order” on canvas == call order, so draw last
             ctx.fillText('T', canvasXT, canvasYT);
             ctx.fillText('P', canvasXP, canvasYP);
-            
+
             ctx.restore();
+
+
+            console.log(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+            let mt2 = sdr2mt(240, 46, -119);
+            console.log(mt2);
+
+
+
 
         } else {
             // fallback to DC only

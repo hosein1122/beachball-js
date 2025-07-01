@@ -417,6 +417,49 @@ export function mt2axes(mt) {
     return [t, n, p];
 }
 
+
+/**
+ * Convert Strike-Dip-Rake (degrees)  →  6-component moment tensor
+ * in the Up-South-East (r,θ,φ) CMT convention.
+ *
+ * @returns [Mrr, Mtt, Mpp, Mrt, Mrp, Mtp]
+ */
+export function sdr2mt(strikeDeg, dipDeg, rakeDeg, M0 = 1) {
+    const toRad = Math.PI / 180;
+
+    const phi = strikeDeg * toRad;   // ϕ
+    const delta = dipDeg * toRad;  // δ
+    const lambda = rakeDeg * toRad;  // λ
+
+    // handy trig
+    const sinD = Math.sin(delta);
+    const cosD = Math.cos(delta);
+    const sin2D = Math.sin(2 * delta);
+    const sinL = Math.sin(lambda);
+    const cosL = Math.cos(lambda);
+    const sin2L = Math.sin(2 * lambda);
+    const cos2L = Math.cos(2 * lambda);
+    const sinP = Math.sin(phi);
+    const cosP = Math.cos(phi);
+    const sin2P = Math.sin(2 * phi);
+    const cos2P = Math.cos(2 * phi);
+
+    // components (Aki-Richards formulation, CMT convention)
+    const Mrr = -sinD * sin2L;
+    const Mtt = sin2D * sinL * sin2P + sinD * sinD * cos2L * (1 - cos2P);
+    const Mpp = -sin2D * sinL * sin2P - sinD * sinD * cos2L * (1 + cos2P);
+    const Mrt = sinD * cosL * cosP + cosD * sinL * sinP;
+    const Mrp = sinD * cosL * sinP - cosD * sinL * cosP;
+    const Mtp = -sin2D * cosL + sinD * sinD * sin2L * cos2P;
+
+    return [Mrr, Mtt, Mpp, Mrt, Mrp, Mtp].map(v => v * M0);
+}
+
+// Example:
+// console.log(sdr2mt(240, 46, -119));
+
+
+
 // ───────────────────────────────────────────
 // 8. plotDC → JavaScript port of plot_dc (double-couple beachball)
 // ---------------------------------------------------------------

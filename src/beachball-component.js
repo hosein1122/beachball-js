@@ -1,7 +1,12 @@
 // import necessary classes and helper
 import { MomentTensor, NodalPlane } from './classes.js';
-import { mt2plane, mt2axes, plotDC, plotMT, sdr2mt } from './beachball.js';
-import { EPSILON } from './constants.js';
+
+import { mt2plane } from './beachball/mt2plane.js';
+import { mt2axes } from './beachball/mt2axes.js';
+import { plotDC } from './beachball/plotDC.js';
+import { plotMT } from './beachball/plotMT.js';
+
+import { EPSILON } from './math/trigHelpers.js';
 
 class BeachballComponent extends HTMLElement {
     static get observedAttributes() {
@@ -48,7 +53,12 @@ class BeachballComponent extends HTMLElement {
             case 'focal-mechanism':
                 try {
                     this.focalMechanism = JSON.parse(newVal);
-                } catch {
+                } catch (err) {
+                    console.error('⚠️ setter threw:', err);
+                    console.log('raw attribute:', newVal);
+
+                    // console.log(newVal);
+                    // console.log(JSON.parse(newVal));
                     console.warn('Invalid JSON for focal-mechanism');
                 }
                 break;
@@ -262,14 +272,6 @@ class BeachballComponent extends HTMLElement {
             ctx.fillText('P', canvasXP, canvasYP);
 
             ctx.restore();
-
-
-            console.log(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
-            let mt2 = sdr2mt(240, 46, -119);
-            console.log(mt2);
-
-
-
 
         } else {
             // fallback to DC only

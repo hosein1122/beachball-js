@@ -1,24 +1,83 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fa">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test Web</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Interactive Beachball Test</title>
+    <link rel="icon" href="favicon.png" type="image/png" />
+    <!-- مسیر را به بستهٔ خروجیِ شما تنظیم کنید -->
+    <script type="module" src="../dist/beachball.esm.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 2rem;
+        }
+
+        label {
+            display: block;
+            margin: 0.5rem 0;
+        }
+
+        input,
+        select {
+            font-size: 1rem;
+            padding: 0.2rem;
+        }
+
+        button {
+            font-size: 1rem;
+            padding: 0.4rem 1rem;
+            margin-top: 0.5rem;
+        }
+    </style>
 </head>
 
 <body>
 
-    <script type="module" src="../dist/beachball.esm.js"></script>
+    <h1>تست تعاملی Beachball Component</h1>
 
+    <label>
+        نوع ورودی:
+        <select id="inputType">
+            <option value="focal-mechanism">Focal Mechanism (6 numbers)</option>
+            <option value="nodal-plane">Nodal Plane (3 numbers)</option>
+            <option value="axes">Principal Axes [[val, strike, dip],...]</option>
+        </select>
+    </label>
 
-    <beachball-viewer fm='[-5.81405e16,7.48112e16,-1.66706e16,-7.7554e15,1.67771e16,1.60557e16]' facecolor="#6EA8FF"
-        bgcolor="#FFFFFF" edgecolor="#666666" alpha="1.0" radius="90" style="display:block; width:240px; height:240px;">
-    </beachball-viewer>
+    <label>
+        مقادیر ورودی (JSON array):
+        <!-- [-27245000000000000,19980000000000000,7265000000000000,12893000000000000,4302000000000000,13587000000000000] -->
+        <input id="inputValues" size="60" value="[-5.81405e16,7.48112e16,-1.66706e16,-7.7554e15,1.67771e16,1.60557e16]" />
+    </label>
 
-    <beachball-viewer fm='[240,46,-119]' edgecolor="#666666" radius="90"
-        style="display:block; width:240px; height:240px;"></beachball-viewer>
+    <button id="updateBtn">بروزرسانی نمودار</button>
 
+    <hr style="margin:2rem 0;">
+
+    <beachball-component id="demo" width="400" size="400" tension-color="#6EA8FF" bg-color="white" edge-color="#666666"
+        line-width="0.5"></beachball-component>
+
+    <script>
+        const demo = document.getElementById("demo");
+        const inputType = document.getElementById("inputType");
+        const inputValues = document.getElementById("inputValues");
+        const btn = document.getElementById("updateBtn");
+
+        btn.addEventListener("click", () => {
+            const type = inputType.value;    // یکی از: focal-mechanism, nodal-plane, axes
+            const val = inputValues.value;  // رشتهٔ JSON
+
+            // اول همهٔ attributeهای قبلی را پاک می‌کنیم
+            demo.removeAttribute("focal-mechanism");
+            demo.removeAttribute("nodal-plane");
+            demo.removeAttribute("axes");
+
+            // سپس صریحاً یکی را ست می‌کنیم
+            demo.setAttribute(type, val);
+        });
+    </script>
 
 </body>
 

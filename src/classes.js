@@ -1,5 +1,4 @@
-import { Matrix } from 'ml-matrix';
-
+//src/classes.js:
 /* ──────────────────────────────────────────────────────────
  * PrincipalAxis
  * --------------------------------------------------------*/
@@ -76,10 +75,6 @@ export class MomentTensor {
     }
 
     /* ---------- derived helpers ---------- */
-
-    get mtMatrix() {
-        return new Matrix(this.mt);
-    }
 
     get mtNormalized() {
         const norm = this.mtFrobeniusNorm();

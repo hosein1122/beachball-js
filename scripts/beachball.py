@@ -842,10 +842,13 @@ def mt2plane(mt):
     v = np.array([[v[1, 1], -v[1, 0], -v[1, 2]],
                  [v[2, 1], -v[2, 0], -v[2, 2]],
                  [-v[0, 1], v[0, 0], v[0, 2]]])
+    
     imax = d.argmax()
     imin = d.argmin()
+
     ae = (v[:, imax] + v[:, imin]) / np.sqrt(2.0)
     an = (v[:, imax] - v[:, imin]) / np.sqrt(2.0)
+
     aer = np.sqrt(np.power(ae[0], 2) + np.power(ae[1], 2) + np.power(ae[2], 2))
     anr = np.sqrt(np.power(an[0], 2) + np.power(an[1], 2) + np.power(an[2], 2))
     ae = ae / aer
@@ -859,6 +862,7 @@ def mt2plane(mt):
     else:
         an1 = -an
         ae1 = -ae
+
     (ft, fd, fl) = tdl(an1, ae1)
     return NodalPlane(360 - ft, fd, 180 - fl)
 
